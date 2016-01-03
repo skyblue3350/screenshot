@@ -20,12 +20,13 @@ class ScreenShot(QtGui.QWidget):
 		if self.settings.value("path", None).isNull():
 			self.path = QtGui.QFileDialog.getExistingDirectory(self, u"画像保存先", ".", QtGui.QFileDialog.ShowDirsOnly)
 			if self.path == "":
-				qApp.quit()
+				sys.exit()
+				#QtGui.qApp.quit()
 		else:
 			self.path = "./"
 
 		self.path = self.settings.value("path", self.path).toString()
-		self.ext   = self.settings.value("ext",   "png").toString()
+		self.ext  = self.settings.value("ext",  "png").toString()
 		self.openFolder = self.settings.value("openFolder", True).toBool()
 		self.settings.endGroup()
 
@@ -38,7 +39,7 @@ class ScreenShot(QtGui.QWidget):
 
 	def keyPressEvent(self, event):
 		if event.key() == QtCore.Qt.Key_Escape:
-			qApp.quit()
+			QtGui.qApp.quit()
 
 	def shot(self):
 		self.show()
