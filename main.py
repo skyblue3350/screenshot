@@ -1,78 +1,57 @@
 # -*- encoding: utf-8 -*-
 
-import miniconf
 import datetime
 import time
 import sys
 import os
 
 import sip
-sip.setapi('QString', 2)
-from PyQt4 import QtGui,QtCore
+sip.setapi("QString", 2)
+
+from PyQt4 import QtGui, QtCore
 
 class ScreenShot(QtGui.QWidget):
 	def __init__(self, parent=None):
 		QtGui.QWidget.__init__(self, parent=parent)
-		#枠を除く
 		self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+		self.settings = QtCore.QSettings("./settings.ini", QtCore.QSettings.IniFormat)
+		self.settings.beginGroup("setting")
 
-		#設定ファイル読み込み
-		try:
-			f = open("setting.cfg", "r")
-			self.setting = miniconf.load(f.read())
-			#要素不足なら例外
-			for i in ["ext", "path"]:
-				if not (i in self.setting):
-					raise IOError
-		except IOError:
-			QtGui.QMessageBox.warning(self, u"エラー", u"設定ファイル（setting.cfg）を開くことが出来ませんでした。\n初期設定を行います。")
-			try:
-				path = QtGui.QFileDialog.getExistingDirectory(self, u"画像保存先", ".", QtGui.QFileDialog.ShowDirsOnly)
-				if path == "":
-					sys.exit()
-				ext, ok = QtGui.QInputDialog.getText(self, u"拡張子", u"保存時の拡張子（jpg or png）：")
-				if not (ext == "jpg" or ext == "png"):
-					sys.exit()
-				self.setting = {
-					"path": path,
-					"ext" : ext,
-					"openFolder": True,
-				}
-				data = miniconf.dump(self.setting)
-				f = open("setting.cfg", "w")
-				f.write(data)
-			except IOError:
-				QtGui.QMessageBox.warning(self, u"エラー", u"setting.cfgに書き込む権限がありません")
-				sys.exit()
-			else:
-				f.close()
-				time.sleep(0.5)
+		if self.settings.value("path", None).isNull():
+			self.path = QtGui.QFileDialog.getExistingDirectory(self, u"画像保存先", ".", QtGui.QFileDialog.ShowDirsOnly)
+			if self.path == "":
+				qApp.quit()
 		else:
-			f.close()
+			self.path = "./"
 
+		self.path = self.settings.value("path", self.path).toString()
+		self.ext   = self.settings.value("ext",   "png").toString()
+		self.openFolder = self.settings.value("openFolder", True).toBool()
+		self.settings.endGroup()
+
+	def closeEvent(self, event):
+		self.settings.beginGroup("setting")
+		self.settings.setValue("path", self.path)
+		self.settings.setValue("ext", self.ext)
+		self.settings.setValue("openFolder", self.openFolder)
+		self.settings.endGroup()
+
+	def keyPressEvent(self, event):
+		if event.key() == QtCore.Qt.Key_Escape:
+			qApp.quit()
 
 	def shot(self):
-		#デスクトップの情報収集
+		self.show()
 		desktop = QtGui.QApplication.desktop()
 		size = desktop.screen().rect()
 		self.pixmap = QtGui.QPixmap.grabWindow(desktop.winId(), desktop.x(), desktop.y(), size.width(), size.height() )
 		self.move(desktop.x(),desktop.y())
 		self.resize(size.width(), size.height())
 
-		#マウスの開始地点と終了地点
 		self.start = QtCore.QPoint(0, 0)
 		self.end   = QtCore.QPoint(0, 0)
 
-		#表示
-		self.show()
-
-	def keyPressEvent(self, event):
-		#ESCで終了
-		if event.key() == QtCore.Qt.Key_Escape:
-			self.close()
-
 	def paintEvent(self, event):
-
 		painter = QtGui.QPainter(self)
 		painter.setPen(QtCore.Qt.NoPen)
 
@@ -95,13 +74,29 @@ class ScreenShot(QtGui.QWidget):
 
 	def mouseReleaseEvent(self, event):
 		self.end = event.pos()
+
+		start = QtCore.QPoint()
+		end  = QtCore.QPoint()
+		start.setX(min(self.start, self.end, key=lambda p: p.x()).x())
+		start.setY(min(self.start, self.end, key=lambda p: p.y()).y())
+		end.setX(max(self.start, self.end, key=lambda p: p.x()).x())
+		end.setY(max(self.start, self.end, key=lambda p: p.y()).y())
+		self.start, self.end = start, end
+
 		self.takeScreenShot()
 
 	def takeScreenShot(self):
 		pixmap = self.pixmap.copy(QtCore.QRect(self.start, self.end))
-		pixmap.save(u"%s\\%s.%s" % (self.setting["path"], datetime.datetime.now().strftime("%Y年%m月%d日%H時%M分%S秒").decode("utf-8"), self.setting["ext"] ))
+		filename = "%s.%s" % (datetime.datetime.now().strftime("%Y年%m月%d日%H時%M分%S秒").decode("utf-8"), self.ext)
+		path = (self.path+os.sep+filename)
+		pixmap.save(path)
 		self.close()
-		if self.setting["openFolder"]: os.system( ("explorer %s" % self.setting["path"]).encode("cp932") )
+
+		if self.openFolder:
+			#Platform Windows
+			cmd  = ("explorer /select,\"%s\" " % ( path)).encode("cp932")
+			os.system( cmd )
+
 
 if __name__ == "__main__":
 	app = QtGui.QApplication(sys.argv)
